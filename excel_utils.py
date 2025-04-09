@@ -45,3 +45,6 @@ def send_push_notification(message):
         pb.push_note("Student App Update", message)
     except Exception as e:
         print("Pushbullet error:", e)
+
+
+
