@@ -4,6 +4,7 @@ import openpyxl
 from datetime import datetime, timedelta
 from notifier import send_push_notification
 import os
+from dateutil import parser
 
 EXCEL_FILE = "Student_Seat_Assignment.xlsx"
 
@@ -38,21 +39,33 @@ def get_expired_students_data():
     wb, sheet = load_excel()
     today = datetime.today().date()
     expired_list = []
+
     for row in range(2, sheet.max_row + 1):
         expiry = sheet[f"F{row}"].value
-        if expiry and isinstance(expiry, datetime):
-            if expiry.date() < today:
-                student = {
-                    "Seat No": sheet[f"A{row}"].value,
-                    "Name": sheet[f"B{row}"].value,
-                    "Day Type": sheet[f"C{row}"].value,
-                    "Charge": sheet[f"D{row}"].value,
-                    "Start Date": sheet[f"E{row}"].value,
-                    "Expiry Date": sheet[f"F{row}"].value,
-                    "Status": sheet[f"G{row}"].value,
-                    "Phone": sheet[f"H{row}"].value,
-                }
-                expired_list.append(student)
+        expiry_date = None
+
+        # Try parsing manually if it's not a datetime
+        if isinstance(expiry, datetime):
+            expiry_date = expiry.date()
+        elif isinstance(expiry, str):
+            try:
+                expiry_date = parser.parse(expiry).date()
+            except:
+                continue
+
+        if expiry_date and expiry_date < today:
+            student = {
+                "Seat No": sheet[f"A{row}"].value,
+                "Name": sheet[f"B{row}"].value,
+                "Day Type": sheet[f"C{row}"].value,
+                "Charge": sheet[f"D{row}"].value,
+                "Start Date": sheet[f"E{row}"].value,
+                "Expiry Date": expiry,
+                "Status": sheet[f"G{row}"].value,
+                "Phone": sheet[f"H{row}"].value,
+            }
+            expired_list.append(student)
+
     return expired_list
 
 def update_expiry_in_excel(req):
