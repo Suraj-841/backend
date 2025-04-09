@@ -1,8 +1,17 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+# === main.py (FastAPI Backend with Expiry + Pushbullet + Phone) ===
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from excel_utils import update_expiry_date, read_students, replace_student_data
-from notifier import send_push_notification
+from pydantic import BaseModel
+from excel_utils import (
+    load_excel,
+    save_excel,
+    run_daily_check,
+    get_all_students,
+    get_expired_students_data,
+    update_expiry_in_excel,
+    replace_student_in_excel
+)
 
 app = FastAPI()
 
@@ -14,39 +23,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-class ExpiryUpdate(BaseModel):
+class UpdateExpiryRequest(BaseModel):
     seat_no: int
     name: str
     new_expiry: str
 
-class Replacement(BaseModel):
+class ReplaceStudentRequest(BaseModel):
     seat_no: int
     name: str
     day_type: str
     charge: int
     start_date: str
-    expiry_date: str
+    phone: str
     status: str
 
 @app.get("/students")
 def get_students():
-    return read_students()
+    return get_all_students()
+
+@app.get("/expired-students")
+def get_expired_students():
+    return get_expired_students_data()
 
 @app.post("/update-expiry")
-def update_expiry(data: ExpiryUpdate):
-    success = update_expiry_date(data.seat_no, data.new_expiry)
-    if success:
-        send_push_notification(f"✅ Expiry updated: {data.name} (Seat {data.seat_no}) -> {data.new_expiry}")
-        return {"status": "updated", "seat_no": data.seat_no}
-    raise HTTPException(status_code=404, detail="Seat not found")
+def update_expiry(req: UpdateExpiryRequest):
+    return update_expiry_in_excel(req)
 
 @app.post("/replace-student")
-def replace_student(data: Replacement):
-    success = replace_student_data(data)
-    if success:
-        if data.name.lower() == "vacant":
-            send_push_notification(f"🚫 Seat {data.seat_no} vacated")
-        else:
-            send_push_notification(f"➕ New student added: {data.name} to Seat {data.seat_no}")
-        return {"status": "student replaced", "seat_no": data.seat_no}
-    raise HTTPException(status_code=404, detail="Seat not found")
+def replace_student(req: ReplaceStudentRequest):
+    return replace_student_in_excel(req)
+
+@app.get("/")
+def root():
+    return {"message": "Backend running ✅"}
+
+@app.get("/daily-check")
+def daily_check():
+    return run_daily_check()

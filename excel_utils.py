@@ -1,50 +1,107 @@
-import pandas as pd
+# === excel_utils.py (Modular Excel Utilities) ===
 
-file_path = "Student_Seat_Assignment.xlsx"
+import openpyxl
+from datetime import datetime, timedelta
+from notifier import send_push_notification
+import os
 
-def read_students():
-    df = pd.read_excel(file_path)
-    return df.fillna("").to_dict(orient="records")
+EXCEL_FILE = "Student_Seat_Assignment.xlsx"
 
-def update_expiry_date(seat_no, new_expiry):
-    df = pd.read_excel(file_path)
-    idx = df[df["Seat No"] == seat_no].index
-    if not idx.empty:
-        df.loc[idx[0], "Expiry Date"] = new_expiry
-        df.to_excel(file_path, index=False)
-        return True
-    return False
+def load_excel():
+    if not os.path.exists(EXCEL_FILE):
+        raise FileNotFoundError(f"{EXCEL_FILE} not found.")
+    wb = openpyxl.load_workbook(EXCEL_FILE)
+    sheet = wb.active
+    return wb, sheet
 
-def replace_student_data(data):
-    df = pd.read_excel(file_path)
-    idx = df[df["Seat No"] == data.seat_no].index
-    if not idx.empty:
-        if data.name.strip().lower() == "vacant":
-            df.loc[idx[0], ["Name", "Day Type", "Charge", "Start Date", "Expiry Date", "Status"]] = ""
-            df.loc[idx[0], "Name"] = "Vacant"
-        else:
-            df.loc[idx[0], "Name"] = data.name
-            df.loc[idx[0], "Day Type"] = data.day_type
-            df.loc[idx[0], "Charge"] = data.charge
-            df.loc[idx[0], "Start Date"] = data.start_date
-            df.loc[idx[0], "Expiry Date"] = data.expiry_date
-            df.loc[idx[0], "Status"] = data.status
-        df.to_excel(file_path, index=False)
-        return True
-    return False
+def save_excel(wb):
+    wb.save(EXCEL_FILE)
 
+def get_all_students():
+    wb, sheet = load_excel()
+    data = []
+    for row in range(2, sheet.max_row + 1):
+        student = {
+            "Seat No": sheet[f"A{row}"].value,
+            "Name": sheet[f"B{row}"].value,
+            "Day Type": sheet[f"C{row}"].value,
+            "Charge": sheet[f"D{row}"].value,
+            "Start Date": sheet[f"E{row}"].value,
+            "Expiry Date": sheet[f"F{row}"].value,
+            "Status": sheet[f"G{row}"].value,
+            "Phone": sheet[f"H{row}"].value,
+        }
+        data.append(student)
+    return data
 
+def get_expired_students_data():
+    wb, sheet = load_excel()
+    today = datetime.today().date()
+    expired_list = []
+    for row in range(2, sheet.max_row + 1):
+        expiry = sheet[f"F{row}"].value
+        if expiry and isinstance(expiry, datetime):
+            if expiry.date() < today:
+                student = {
+                    "Seat No": sheet[f"A{row}"].value,
+                    "Name": sheet[f"B{row}"].value,
+                    "Day Type": sheet[f"C{row}"].value,
+                    "Charge": sheet[f"D{row}"].value,
+                    "Start Date": sheet[f"E{row}"].value,
+                    "Expiry Date": sheet[f"F{row}"].value,
+                    "Status": sheet[f"G{row}"].value,
+                    "Phone": sheet[f"H{row}"].value,
+                }
+                expired_list.append(student)
+    return expired_list
 
-from pushbullet import Pushbullet
+def update_expiry_in_excel(req):
+    wb, sheet = load_excel()
+    for row in range(2, sheet.max_row + 1):
+        if sheet[f"A{row}"].value == req.seat_no and sheet[f"B{row}"].value == req.name:
+            sheet[f"F{row}"] = req.new_expiry
+            break
+    save_excel(wb)
+    return {"message": "Expiry updated successfully."}
 
-API_KEY = "o.2WygSBf3nAwSfMbAG4x9whsVOWVxNpuC"
-pb = Pushbullet(API_KEY)
+def replace_student_in_excel(req):
+    wb, sheet = load_excel()
+    for row in range(2, sheet.max_row + 1):
+        if sheet[f"A{row}"].value == req.seat_no:
+            sheet[f"B{row}"] = req.name
+            sheet[f"C{row}"] = req.day_type
+            sheet[f"D{row}"] = req.charge
+            sheet[f"E{row}"] = req.start_date
+            sheet[f"F{row}"] = ""
+            sheet[f"G{row}"] = req.status
+            sheet[f"H{row}"] = req.phone
 
-def send_push_notification(message):
-    try:
-        pb.push_note("Student App Update", message)
-    except Exception as e:
-        print("Pushbullet error:", e)
+            try:
+                start = datetime.strptime(req.start_date, "%d %B")
+                start = start.replace(year=datetime.now().year)
+                expiry = start + timedelta(days=30)
+                sheet[f"F{row}"] = expiry.strftime("%d %B %Y")
+            except Exception as e:
+                print("Date parsing error:", e)
 
+            break
+    save_excel(wb)
+    return {"message": "Student replaced successfully."}
 
-
+def run_daily_check():
+    wb, sheet = load_excel()
+    today = datetime.today().date()
+    expired = []
+    for row in range(2, sheet.max_row + 1):
+        name = sheet[f"B{row}"].value
+        expiry = sheet[f"F{row}"].value
+        status = sheet[f"G{row}"].value
+        seat = sheet[f"A{row}"].value
+        if name and expiry and isinstance(expiry, datetime):
+            if expiry.date() < today and status != "Pending":
+                sheet[f"G{row}"] = "Pending"
+                msg = f"{name} (Seat {seat}) membership expired."
+                send_push_notification(msg)
+                expired.append(msg)
+    save_excel(wb)
+    return {"expired_students": expired, "count": len(expired)}
