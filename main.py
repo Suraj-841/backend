@@ -44,6 +44,25 @@ class ReplaceStudentRequest(BaseModel):
     phone: Optional[str] = ""
     status: str
 
+WHATSAPP_LINK_FILE = "group_link.txt"
+
+
+@app.get("/whatsapp-link")
+def get_whatsapp_link():
+    if os.path.exists(WHATSAPP_LINK_FILE):
+        with open(WHATSAPP_LINK_FILE, "r") as file:
+            return {"link": file.read().strip()}
+    return {"link": ""}
+
+@app.post("/whatsapp-link")
+def set_whatsapp_link(data: dict):
+    link = data.get("link", "")
+    with open(WHATSAPP_LINK_FILE, "w") as file:
+        file.write(link)
+    return {"message": "Link updated successfully."}
+
+
+
 @app.get("/students")
 def get_students():
     return get_all_students()
