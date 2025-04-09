@@ -1,6 +1,4 @@
-# === main.py (FastAPI Backend with Expiry + Pushbullet + Phone) ===
-
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
@@ -13,6 +11,7 @@ from excel_utils import (
     update_expiry_in_excel,
     replace_student_in_excel
 )
+from notifier import send_push_notification  # <== Add this line
 
 app = FastAPI()
 
@@ -48,11 +47,25 @@ def get_expired_students():
 
 @app.post("/update-expiry")
 def update_expiry(req: UpdateExpiryRequest):
-    return update_expiry_in_excel(req)
+    updated = update_expiry_in_excel(req)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    send_push_notification(f"📆 Expiry updated for {req.name} (Seat {req.seat_no}) to {req.new_expiry}.")
+    return {"message": "Expiry updated successfully."}
 
 @app.post("/replace-student")
 def replace_student(req: ReplaceStudentRequest):
-    return replace_student_in_excel(req)
+    result = replace_student_in_excel(req)
+    if not result:
+        raise HTTPException(status_code=400, detail="Failed to replace student")
+
+    if req.name.lower() == "vacant":
+        send_push_notification(f"🪑 Seat {req.seat_no} has been vacated.")
+    else:
+        send_push_notification(f"👤 {req.name} has been assigned to Seat {req.seat_no}.")
+
+    return {"message": "Student replaced successfully."}
 
 @app.get("/")
 def root():
@@ -60,4 +73,9 @@ def root():
 
 @app.get("/daily-check")
 def daily_check():
-    return run_daily_check()
+    result = run_daily_check()
+    if result["count"] > 0:
+        send_push_notification(f"🚨 {result['count']} student(s) expired. Daily check complete.")
+    else:
+        send_push_notification("✅ Daily check complete. No expired students today.")
+    return result
