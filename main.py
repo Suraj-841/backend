@@ -23,6 +23,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class StatusUpdateRequest(BaseModel):
+    seat_no: int
+    new_status: str
+
+
 class UpdateExpiryRequest(BaseModel):
     seat_no: int
     name: str
@@ -67,9 +72,31 @@ def replace_student(req: ReplaceStudentRequest):
 
     return {"message": "Student replaced successfully."}
 
+
+@app.post("/update-status")
+def update_status(req: StatusUpdateRequest):
+    wb, sheet = load_excel()
+    found = False
+
+    for row in range(2, sheet.max_row + 1):
+        if sheet[f"A{row}"].value == req.seat_no:
+            sheet[f"G{row}"] = req.new_status
+            found = True
+            break
+
+    if not found:
+        raise HTTPException(status_code=404, detail="Seat not found")
+
+    save_excel(wb)
+    send_push_notification(f"💰 Seat {req.seat_no} status updated to {req.new_status}")
+    return {"message": "Status updated successfully."}
+
+
 @app.get("/")
 def root():
     return {"message": "Backend running ✅"}
+
+
 
 @app.get("/daily-check")
 def daily_check():
