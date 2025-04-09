@@ -2,6 +2,8 @@ from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
+import os
+import openpyxl
 from excel_utils import (
     load_excel,
     save_excel,
@@ -95,6 +97,29 @@ def update_status(req: StatusUpdateRequest):
 @app.get("/")
 def root():
     return {"message": "Backend running ✅"}
+
+@app.get("/left-students")
+def get_left_students():
+    filename = "Left_Students_Log.xlsx"
+    if not os.path.exists(filename):
+        return []
+    
+    wb = openpyxl.load_workbook(filename)
+    sheet = wb.active
+    data = []
+    for row in range(2, sheet.max_row + 1):
+        student = {
+            "Seat No": sheet[f"A{row}"].value,
+            "Name": sheet[f"B{row}"].value,
+            "Phone": sheet[f"C{row}"].value,
+            "Start Date": sheet[f"D{row}"].value,
+            "Left On": sheet[f"E{row}"].value,
+            "Status": sheet[f"F{row}"].value,
+            "Reason": sheet[f"G{row}"].value,
+        }
+        data.append(student)
+    return data
+
 
 
 

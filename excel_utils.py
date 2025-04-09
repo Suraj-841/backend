@@ -1,4 +1,4 @@
-# === excel_utils.py (Modular Excel Utilities) ===
+# === excel_utils.py (Modular Excel Utilities with Logging for Left Students) ===
 
 import openpyxl
 from datetime import datetime, timedelta
@@ -7,6 +7,7 @@ import os
 from dateutil import parser
 
 EXCEL_FILE = "Student_Seat_Assignment.xlsx"
+LEFT_LOG_FILE = "Left_Students_Log.xlsx"
 
 def load_excel():
     if not os.path.exists(EXCEL_FILE):
@@ -77,10 +78,43 @@ def update_expiry_in_excel(req):
     save_excel(wb)
     return {"message": "Expiry updated successfully."}
 
+def log_left_student(data):
+    if not os.path.exists(LEFT_LOG_FILE):
+        wb = openpyxl.Workbook()
+        sheet = wb.active
+        sheet.append(["Seat No", "Name", "Phone", "Start Date", "Left On", "Status", "Reason"])
+    else:
+        wb = openpyxl.load_workbook(LEFT_LOG_FILE)
+        sheet = wb.active
+
+    today = datetime.today().strftime("%d %B %Y")
+    sheet.append([
+        data.get("seat_no"),
+        data.get("name"),
+        data.get("phone", ""),
+        data.get("start_date", ""),
+        today,
+        data.get("status", ""),
+        "Vacated"
+    ])
+    wb.save(LEFT_LOG_FILE)
+
 def replace_student_in_excel(req):
     wb, sheet = load_excel()
     for row in range(2, sheet.max_row + 1):
         if sheet[f"A{row}"].value == req.seat_no:
+
+            # ✅ If student is being vacated — log their details
+            if req.name.lower() == "vacant":
+                log_left_student({
+                    "seat_no": sheet[f"A{row}"].value,
+                    "name": sheet[f"B{row}"].value,
+                    "phone": sheet[f"H{row}"].value,
+                    "start_date": sheet[f"E{row}"].value,
+                    "status": sheet[f"G{row}"].value
+                })
+
+            # ✅ Replace student (new or vacant)
             sheet[f"B{row}"] = req.name
             sheet[f"C{row}"] = req.day_type
             sheet[f"D{row}"] = req.charge
