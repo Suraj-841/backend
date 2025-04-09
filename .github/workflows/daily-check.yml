@@ -1,0 +1,15 @@
+name: Daily Pushbullet Ping
+
+on:
+  schedule:
+    - cron: "0 5 * * *"  # Every day at 10:30 AM IST
+  workflow_dispatch:
+
+jobs:
+  daily-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping the /daily-check endpoint
+        run: |
+          curl -s -X GET https://backend-4xju.onrender.com
