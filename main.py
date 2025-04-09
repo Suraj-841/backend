@@ -34,7 +34,7 @@ class ReplaceStudentRequest(BaseModel):
     day_type: str
     charge: int
     start_date: str
-    phone: str
+    phone: Optional[str] = ""
     status: str
 
 @app.get("/students")
