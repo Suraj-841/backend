@@ -60,11 +60,14 @@ def get_all_students():
         } for row in rows
     ]
 
-from dateutil import parser
+
 from datetime import datetime
+from dateutil import parser
 
 def get_expired_students():
     today = datetime.today().date()
+    current_year = today.year
+
     conn = connect()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM students")
@@ -72,14 +75,22 @@ def get_expired_students():
     conn.close()
 
     expired = []
-    for row in rows:
-        expiry = row[5]
 
-        if not expiry:
-            continue  # Skip if expiry is None or empty
+    for row in rows:
+        expiry_raw = row[5]  # This is the expiry_date column
+
+        if not expiry_raw or str(expiry_raw).strip() == "":
+            continue  # Skip blanks or empty strings
 
         try:
-            expiry_date = parser.parse(str(expiry)).date()
+            expiry_str = str(expiry_raw).strip()
+
+            # If year is missing (like "01 April"), add current year
+            if not any(char.isdigit() for char in expiry_str[-4:]):
+                expiry_str += f" {current_year}"
+
+            expiry_date = parser.parse(expiry_str).date()
+
             if expiry_date < today:
                 expired.append({
                     "Seat No": row[0],
@@ -92,10 +103,11 @@ def get_expired_students():
                     "Phone": row[7]
                 })
         except Exception as e:
-            print(f"❌ Error parsing expiry for row {row[0]}: {e}")
+            print(f"❌ Error parsing expiry '{expiry_raw}' for Seat {row[0]}: {e}")
             continue
 
     return expired
+
 
 
 def update_expiry(seat_no: int, new_expiry: str):
