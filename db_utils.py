@@ -119,29 +119,26 @@ def update_status(seat_no: int, new_status: str):
     if success:
         send_push_notification(f"💰 Seat {seat_no} status updated to {new_status}")
     return success
-
 def replace_student(req):
     conn = connect()
     cursor = conn.cursor()
 
-    # === If Vacating, Log Current Student Data BEFORE Replacing ===
+    # If vacating, fetch the current student info before overwriting
     if req.name.lower() == "vacant":
         cursor.execute("SELECT * FROM students WHERE seat_no = ?", (req.seat_no,))
-        row = cursor.fetchone()
-        if row:
+        current = cursor.fetchone()
+        if current:
             log_left_students({
-                "seat_no": row[0],
-                "name": row[1],
-                "day_type": row[2],
-                "charge": row[3],
-                "start_date": row[4],
-                "expiry_date": row[5],
-                "status": row[6],
-                "phone": row[7],
-                "reason": "Vacated"
+                "seat_no": current[0],
+                "name": current[1],
+                "day_type": current[2],
+                "charge": current[3],
+                "start_date": current[4],
+                "expiry_date": current[5],
+                "status": current[6],
+                "phone": current[7]
             })
 
-    # === Calculate Expiry Date ===
     expiry_date = ""
     try:
         start_dt = datetime.strptime(req.start_date, "%d %B")
@@ -151,7 +148,6 @@ def replace_student(req):
     except:
         pass
 
-    # === Replace Student in DB ===
     cursor.execute("""
         INSERT OR REPLACE INTO students (seat_no, name, day_type, charge, start_date, expiry_date, status, phone)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -169,7 +165,6 @@ def replace_student(req):
     conn.commit()
     conn.close()
 
-    # === Send Push Notification ===
     if req.name.lower() == "vacant":
         send_push_notification(f"🪑 Seat {req.seat_no} has been vacated.")
     else:
@@ -177,20 +172,19 @@ def replace_student(req):
 
     return True
 
-
-def log_left_students(req):
+def log_left_students(student):
     conn = connect()
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO left_students (seat_no, name, phone, start_date, left_on, status, reason)
         VALUES (?, ?, ?, ?, ?, ?, ?)
     """, (
-        req.seat_no,
-        req.name,
-        req.phone,
-        req.start_date,
+        student['seat_no'],
+        student['name'],
+        student['phone'],
+        student['start_date'],
         datetime.today().strftime("%d %B %Y"),
-        req.status,
+        student['status'],
         "Vacated"
     ))
     conn.commit()
