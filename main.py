@@ -1,19 +1,23 @@
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 import os
-import openpyxl
-from excel_utils import (
-    load_excel,
-    save_excel,
-    run_daily_check,
+from fastapi.responses import FileResponse
+import csv
+
+from db_utils import (
+    init_db,
     get_all_students,
-    get_expired_students_data,
-    update_expiry_in_excel,
-    replace_student_in_excel
+    get_expired_students,
+    update_expiry,
+    update_status,
+    replace_student,
+    daily_check,
+    get_left_students,
 )
-from notifier import send_push_notification  # <== Add this line
+
+from notifier import send_push_notification
 
 app = FastAPI()
 
@@ -25,10 +29,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+init_db()  # 🧠 Initializes the database on startup
+
 class StatusUpdateRequest(BaseModel):
     seat_no: int
     new_status: str
-
 
 class UpdateExpiryRequest(BaseModel):
     seat_no: int
@@ -46,7 +51,6 @@ class ReplaceStudentRequest(BaseModel):
 
 WHATSAPP_LINK_FILE = "group_link.txt"
 
-
 @app.get("/whatsapp-link")
 def get_whatsapp_link():
     if os.path.exists(WHATSAPP_LINK_FILE):
@@ -61,28 +65,25 @@ def set_whatsapp_link(data: dict):
         file.write(link)
     return {"message": "Link updated successfully."}
 
-
-
 @app.get("/students")
 def get_students():
     return get_all_students()
 
 @app.get("/expired-students")
 def get_expired_students():
-    return get_expired_students_data()
+    return get_expired_students()
 
 @app.post("/update-expiry")
-def update_expiry(req: UpdateExpiryRequest):
-    updated = update_expiry_in_excel(req)
-    if not updated:
+def update_expiry_handler(req: UpdateExpiryRequest):
+    success = update_expiry(req.seat_no, req.new_expiry)
+    if not success:
         raise HTTPException(status_code=404, detail="Student not found")
-
     send_push_notification(f"📆 Expiry updated for {req.name} (Seat {req.seat_no}) to {req.new_expiry}.")
     return {"message": "Expiry updated successfully."}
 
 @app.post("/replace-student")
-def replace_student(req: ReplaceStudentRequest):
-    result = replace_student_in_excel(req)
+def replace_student_handler(req: ReplaceStudentRequest):
+    result = replace_student(req)
     if not result:
         raise HTTPException(status_code=400, detail="Failed to replace student")
 
@@ -90,63 +91,46 @@ def replace_student(req: ReplaceStudentRequest):
         send_push_notification(f"🪑 Seat {req.seat_no} has been vacated.")
     else:
         send_push_notification(f"👤 {req.name} has been assigned to Seat {req.seat_no}.")
-
     return {"message": "Student replaced successfully."}
 
-
 @app.post("/update-status")
-def update_status(req: StatusUpdateRequest):
-    wb, sheet = load_excel()
-    found = False
-
-    for row in range(2, sheet.max_row + 1):
-        if sheet[f"A{row}"].value == req.seat_no:
-            sheet[f"G{row}"] = req.new_status
-            found = True
-            break
-
-    if not found:
+def update_status_handler(req: StatusUpdateRequest):
+    success = update_status(req.seat_no, req.new_status)
+    if not success:
         raise HTTPException(status_code=404, detail="Seat not found")
-
-    save_excel(wb)
     send_push_notification(f"💰 Seat {req.seat_no} status updated to {req.new_status}")
     return {"message": "Status updated successfully."}
-
 
 @app.get("/")
 def root():
     return {"message": "Backend running ✅"}
 
 @app.get("/left-students")
-def get_left_students():
-    filename = "Left_Students_Log.xlsx"
-    if not os.path.exists(filename):
-        return []
-    
-    wb = openpyxl.load_workbook(filename)
-    sheet = wb.active
-    data = []
-    for row in range(2, sheet.max_row + 1):
-        student = {
-            "Seat No": sheet[f"A{row}"].value,
-            "Name": sheet[f"B{row}"].value,
-            "Phone": sheet[f"C{row}"].value,
-            "Start Date": sheet[f"D{row}"].value,
-            "Left On": sheet[f"E{row}"].value,
-            "Status": sheet[f"F{row}"].value,
-            "Reason": sheet[f"G{row}"].value,
-        }
-        data.append(student)
-    return data
-
-
-
+def view_left():
+    return get_left_students()
 
 @app.get("/daily-check")
-def daily_check():
-    result = run_daily_check()
+def daily_checker():
+    result = daily_check()
     if result["count"] > 0:
         send_push_notification(f"🚨 {result['count']} student(s) expired. Daily check complete.")
     else:
         send_push_notification("✅ Daily check complete. No expired students today.")
     return result
+
+
+
+@app.get("/download-left-students")
+def download_left_students():
+    from db_utils import get_left_students  # import your fetch logic
+    filename = "Left_Students_Log.csv"
+    headers = ["Seat No", "Name", "Phone", "Start Date", "Left On", "Status", "Reason"]
+    data = get_left_students()
+
+    with open(filename, mode="w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=headers)
+        writer.writeheader()
+        for student in data:
+            writer.writerow(student)
+
+    return FileResponse(path=filename, filename=filename, media_type='text/csv')
