@@ -60,6 +60,9 @@ def get_all_students():
         } for row in rows
     ]
 
+from dateutil import parser
+from datetime import datetime
+
 def get_expired_students():
     today = datetime.today().date()
     conn = connect()
@@ -71,8 +74,12 @@ def get_expired_students():
     expired = []
     for row in rows:
         expiry = row[5]
+
+        if not expiry:
+            continue  # Skip if expiry is None or empty
+
         try:
-            expiry_date = parser.parse(expiry).date()
+            expiry_date = parser.parse(str(expiry)).date()
             if expiry_date < today:
                 expired.append({
                     "Seat No": row[0],
@@ -84,9 +91,12 @@ def get_expired_students():
                     "Status": row[6],
                     "Phone": row[7]
                 })
-        except:
+        except Exception as e:
+            print(f"❌ Error parsing expiry for row {row[0]}: {e}")
             continue
+
     return expired
+
 
 def update_expiry(seat_no: int, new_expiry: str):
     conn = connect()
@@ -113,6 +123,25 @@ def update_status(seat_no: int, new_status: str):
 def replace_student(req):
     conn = connect()
     cursor = conn.cursor()
+
+    # === If Vacating, Log Current Student Data BEFORE Replacing ===
+    if req.name.lower() == "vacant":
+        cursor.execute("SELECT * FROM students WHERE seat_no = ?", (req.seat_no,))
+        row = cursor.fetchone()
+        if row:
+            log_left_students({
+                "seat_no": row[0],
+                "name": row[1],
+                "day_type": row[2],
+                "charge": row[3],
+                "start_date": row[4],
+                "expiry_date": row[5],
+                "status": row[6],
+                "phone": row[7],
+                "reason": "Vacated"
+            })
+
+    # === Calculate Expiry Date ===
     expiry_date = ""
     try:
         start_dt = datetime.strptime(req.start_date, "%d %B")
@@ -122,6 +151,7 @@ def replace_student(req):
     except:
         pass
 
+    # === Replace Student in DB ===
     cursor.execute("""
         INSERT OR REPLACE INTO students (seat_no, name, day_type, charge, start_date, expiry_date, status, phone)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -139,13 +169,14 @@ def replace_student(req):
     conn.commit()
     conn.close()
 
+    # === Send Push Notification ===
     if req.name.lower() == "vacant":
-        log_left_students(req)
         send_push_notification(f"🪑 Seat {req.seat_no} has been vacated.")
     else:
         send_push_notification(f"👤 {req.name} assigned to Seat {req.seat_no}.")
 
     return True
+
 
 def log_left_students(req):
     conn = connect()

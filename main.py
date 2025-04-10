@@ -6,10 +6,10 @@ import os
 from fastapi.responses import FileResponse
 import csv
 
+from db_utils import get_expired_students as fetch_expired_students
 from db_utils import (
     init_db,
     get_all_students,
-    get_expired_students,
     update_expiry,
     update_status,
     replace_student,
@@ -70,8 +70,8 @@ def get_students():
     return get_all_students()
 
 @app.get("/expired-students")
-def get_expired_students():
-    return get_expired_students()
+def expired_students_route():
+    return fetch_expired_students()
 
 @app.post("/update-expiry")
 def update_expiry_handler(req: UpdateExpiryRequest):
