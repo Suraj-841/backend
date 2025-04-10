@@ -134,3 +134,15 @@ def download_left_students():
             writer.writerow(student)
 
     return FileResponse(path=filename, filename=filename, media_type='text/csv')
+
+
+
+from fastapi.responses import FileResponse
+
+@app.get("/download-db")
+def download_db():
+    db_path = "students.db"
+    if os.path.exists(db_path):
+        return FileResponse(path=db_path, filename="students.db", media_type="application/octet-stream")
+    raise HTTPException(status_code=404, detail="Database file not found")
+
