@@ -1,22 +1,22 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
 import os
-from fastapi.responses import FileResponse
 import csv
 
-from db_utils import get_expired_students as fetch_expired_students
 from db_utils import (
     init_db,
     get_all_students,
+    get_expired_students as fetch_expired_students,
     update_expiry,
     update_status,
     replace_student,
     daily_check,
     get_left_students,
+    update_day_type
 )
-
 from notifier import send_push_notification
 
 app = FastAPI()
@@ -29,7 +29,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-init_db()  # 🧠 Initializes the database on startup
+init_db()
+
+# === Models ===
 
 class StatusUpdateRequest(BaseModel):
     seat_no: int
@@ -49,6 +51,12 @@ class ReplaceStudentRequest(BaseModel):
     phone: Optional[str] = ""
     status: str
 
+class DayTypeUpdateRequest(BaseModel):
+    seat_no: int
+    new_day_type: str
+
+# === WhatsApp Group Link ===
+
 WHATSAPP_LINK_FILE = "group_link.txt"
 
 @app.get("/whatsapp-link")
@@ -65,6 +73,12 @@ def set_whatsapp_link(data: dict):
         file.write(link)
     return {"message": "Link updated successfully."}
 
+# === Core APIs ===
+
+@app.get("/")
+def root():
+    return {"message": "Backend running ✅"}
+
 @app.get("/students")
 def get_students():
     return get_all_students()
@@ -72,6 +86,10 @@ def get_students():
 @app.get("/expired-students")
 def expired_students_route():
     return fetch_expired_students()
+
+@app.get("/left-students")
+def view_left():
+    return get_left_students()
 
 @app.post("/update-expiry")
 def update_expiry_handler(req: UpdateExpiryRequest):
@@ -86,7 +104,6 @@ def replace_student_handler(req: ReplaceStudentRequest):
     result = replace_student(req)
     if not result:
         raise HTTPException(status_code=400, detail="Failed to replace student")
-
     if req.name.lower() == "vacant":
         send_push_notification(f"🪑 Seat {req.seat_no} has been vacated.")
     else:
@@ -101,13 +118,12 @@ def update_status_handler(req: StatusUpdateRequest):
     send_push_notification(f"💰 Seat {req.seat_no} status updated to {req.new_status}")
     return {"message": "Status updated successfully."}
 
-@app.get("/")
-def root():
-    return {"message": "Backend running ✅"}
-
-@app.get("/left-students")
-def view_left():
-    return get_left_students()
+@app.post("/update-day-type")
+def change_day_type(req: DayTypeUpdateRequest):
+    updated = update_day_type(req.seat_no, req.new_day_type)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Seat not found")
+    return {"message": "Day type updated successfully."}
 
 @app.get("/daily-check")
 def daily_checker():
@@ -118,11 +134,10 @@ def daily_checker():
         send_push_notification("✅ Daily check complete. No expired students today.")
     return result
 
-
+# === CSV / DB File Download ===
 
 @app.get("/download-left-students")
 def download_left_students():
-    from db_utils import get_left_students  # import your fetch logic
     filename = "Left_Students_Log.csv"
     headers = ["Seat No", "Name", "Phone", "Start Date", "Left On", "Status", "Reason"]
     data = get_left_students()
@@ -135,28 +150,9 @@ def download_left_students():
 
     return FileResponse(path=filename, filename=filename, media_type='text/csv')
 
-
-
-from db_utils import update_day_type  # make sure it's imported
-
-class DayTypeUpdateRequest(BaseModel):
-    seat_no: int
-    new_day_type: str
-
-@app.post("/update-day-type")
-def change_day_type(req: DayTypeUpdateRequest):
-    updated = update_day_type(req.seat_no, req.new_day_type)
-    if not updated:
-        raise HTTPException(status_code=404, detail="Seat not found")
-    return {"message": "Day type updated successfully."}
-
-
-from fastapi.responses import FileResponse
-
 @app.get("/download-db")
 def download_db():
     db_path = "students.db"
     if os.path.exists(db_path):
         return FileResponse(path=db_path, filename="students.db", media_type="application/octet-stream")
     raise HTTPException(status_code=404, detail="Database file not found")
-

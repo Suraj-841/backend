@@ -1,14 +1,14 @@
-import sqlite3
+import psycopg2
+import os
 from datetime import datetime, timedelta
-from typing import List
-from fastapi import HTTPException
 from notifier import send_push_notification
 from dateutil import parser
+from dotenv import load_dotenv
 
-DB_NAME = "students.db"
+load_dotenv()
 
 def connect():
-    return sqlite3.connect(DB_NAME, check_same_thread=False)
+    return psycopg2.connect(("postgresql://neondb_owner:npg_J6gaj8onvXkH@ep-fragrant-silence-a51qqre0-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require"))
 
 def init_db():
     conn = connect()
@@ -27,7 +27,7 @@ def init_db():
     ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS left_students (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             seat_no INTEGER,
             name TEXT,
             phone TEXT,
@@ -60,10 +60,6 @@ def get_all_students():
         } for row in rows
     ]
 
-
-from datetime import datetime
-from dateutil import parser
-
 def get_expired_students():
     today = datetime.today().date()
     current_year = today.year
@@ -77,15 +73,12 @@ def get_expired_students():
     expired = []
 
     for row in rows:
-        expiry_raw = row[5]  # This is the expiry_date column
-
+        expiry_raw = row[5]
         if not expiry_raw or str(expiry_raw).strip() == "":
-            continue  # Skip blanks or empty strings
+            continue
 
         try:
             expiry_str = str(expiry_raw).strip()
-
-            # If year is missing (like "01 April"), add current year
             if not any(char.isdigit() for char in expiry_str[-4:]):
                 expiry_str += f" {current_year}"
 
@@ -108,12 +101,10 @@ def get_expired_students():
 
     return expired
 
-
-
 def update_expiry(seat_no: int, new_expiry: str):
     conn = connect()
     cursor = conn.cursor()
-    cursor.execute("UPDATE students SET expiry_date = ? WHERE seat_no = ?", (new_expiry, seat_no))
+    cursor.execute("UPDATE students SET expiry_date = %s WHERE seat_no = %s", (new_expiry, seat_no))
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
@@ -124,20 +115,20 @@ def update_expiry(seat_no: int, new_expiry: str):
 def update_status(seat_no: int, new_status: str):
     conn = connect()
     cursor = conn.cursor()
-    cursor.execute("UPDATE students SET status = ? WHERE seat_no = ?", (new_status, seat_no))
+    cursor.execute("UPDATE students SET status = %s WHERE seat_no = %s", (new_status, seat_no))
     conn.commit()
     success = cursor.rowcount > 0
     conn.close()
     if success:
         send_push_notification(f"💰 Seat {seat_no} status updated to {new_status}")
     return success
+
 def replace_student(req):
     conn = connect()
     cursor = conn.cursor()
 
-    # If vacating, fetch the current student info before overwriting
     if req.name.lower() == "vacant":
-        cursor.execute("SELECT * FROM students WHERE seat_no = ?", (req.seat_no,))
+        cursor.execute("SELECT * FROM students WHERE seat_no = %s", (req.seat_no,))
         current = cursor.fetchone()
         if current:
             log_left_students({
@@ -161,8 +152,17 @@ def replace_student(req):
         pass
 
     cursor.execute("""
-        INSERT OR REPLACE INTO students (seat_no, name, day_type, charge, start_date, expiry_date, status, phone)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO students (seat_no, name, day_type, charge, start_date, expiry_date, status, phone)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (seat_no)
+        DO UPDATE SET
+            name = EXCLUDED.name,
+            day_type = EXCLUDED.day_type,
+            charge = EXCLUDED.charge,
+            start_date = EXCLUDED.start_date,
+            expiry_date = EXCLUDED.expiry_date,
+            status = EXCLUDED.status,
+            phone = EXCLUDED.phone
     """, (
         req.seat_no,
         req.name,
@@ -189,7 +189,7 @@ def log_left_students(student):
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO left_students (seat_no, name, phone, start_date, left_on, status, reason)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
     """, (
         student['seat_no'],
         student['name'],
@@ -227,22 +227,19 @@ def daily_check():
     count = 0
     for student in expired_students:
         if student['Status'].lower() != "pending":
-            cursor.execute("UPDATE students SET status = ? WHERE seat_no = ?", ("Pending", student['Seat No']))
+            cursor.execute("UPDATE students SET status = %s WHERE seat_no = %s", ("Pending", student['Seat No']))
             count += 1
     conn.commit()
     conn.close()
     return {"expired_students": expired_students, "count": count}
 
-
 def update_day_type(seat_no: int, new_day_type: str):
     conn = connect()
     cursor = conn.cursor()
-    cursor.execute("UPDATE students SET day_type = ? WHERE seat_no = ?", (new_day_type, seat_no))
+    cursor.execute("UPDATE students SET day_type = %s WHERE seat_no = %s", (new_day_type, seat_no))
     conn.commit()
     updated = cursor.rowcount > 0
     conn.close()
-
     if updated:
         send_push_notification(f"🔄 Seat {seat_no} switched to {new_day_type}")
     return updated
-
