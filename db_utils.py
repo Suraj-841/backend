@@ -40,10 +40,11 @@ def init_db():
     conn.commit()
     conn.close()
 
+    
 def get_all_students():
     conn = connect()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM students")
+    cursor.execute("SELECT * FROM students ORDER BY seat_no ASC")  # ✅ Sorted to maintain consistent card order
     rows = cursor.fetchall()
     conn.close()
 
@@ -59,6 +60,7 @@ def get_all_students():
             "Phone": row[7]
         } for row in rows
     ]
+
 
 def get_expired_students():
     today = datetime.today().date()
