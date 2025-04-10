@@ -59,19 +59,21 @@ class DayTypeUpdateRequest(BaseModel):
 
 WHATSAPP_LINK_FILE = "group_link.txt"
 
+
+from db_utils import get_setting, set_setting
+
 @app.get("/whatsapp-link")
 def get_whatsapp_link():
-    if os.path.exists(WHATSAPP_LINK_FILE):
-        with open(WHATSAPP_LINK_FILE, "r") as file:
-            return {"link": file.read().strip()}
-    return {"link": ""}
+    link = get_setting("whatsapp_link")
+    return {"link": link}
 
 @app.post("/whatsapp-link")
 def set_whatsapp_link(data: dict):
     link = data.get("link", "")
-    with open(WHATSAPP_LINK_FILE, "w") as file:
-        file.write(link)
-    return {"message": "Link updated successfully."}
+    set_setting("whatsapp_link", link, notify=True)
+    return {"message": "WhatsApp link updated ✅"}
+
+
 
 # === Core APIs ===
 

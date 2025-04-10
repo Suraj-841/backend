@@ -26,6 +26,13 @@ def init_db():
         )
     ''')
     cursor.execute('''
+    CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+    )
+''')
+
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS left_students (
             id SERIAL PRIMARY KEY,
             seat_no INTEGER,
@@ -40,7 +47,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-    
+
 def get_all_students():
     conn = connect()
     cursor = conn.cursor()
@@ -245,3 +252,25 @@ def update_day_type(seat_no: int, new_day_type: str):
     if updated:
         send_push_notification(f"🔄 Seat {seat_no} switched to {new_day_type}")
     return updated
+
+def set_setting(key: str, value: str, notify: bool = False):
+    conn = connect()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO settings (key, value)
+        VALUES (%s, %s)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+    ''', (key, value))
+    conn.commit()
+    conn.close()
+    if notify:
+        send_push_notification(f"⚙️ Setting '{key}' updated.")
+
+def get_setting(key: str) -> str:
+    conn = connect()
+    cursor = conn.cursor()
+    cursor.execute('SELECT value FROM settings WHERE key = %s', (key,))
+    result = cursor.fetchone()
+    conn.close()
+    return result[0] if result else ""
+
