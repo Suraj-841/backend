@@ -137,6 +137,20 @@ def download_left_students():
 
 
 
+from db_utils import update_day_type  # make sure it's imported
+
+class DayTypeUpdateRequest(BaseModel):
+    seat_no: int
+    new_day_type: str
+
+@app.post("/update-day-type")
+def change_day_type(req: DayTypeUpdateRequest):
+    updated = update_day_type(req.seat_no, req.new_day_type)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Seat not found")
+    return {"message": "Day type updated successfully."}
+
+
 from fastapi.responses import FileResponse
 
 @app.get("/download-db")
