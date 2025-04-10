@@ -232,3 +232,17 @@ def daily_check():
     conn.commit()
     conn.close()
     return {"expired_students": expired_students, "count": count}
+
+
+def update_day_type(seat_no: int, new_day_type: str):
+    conn = connect()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE students SET day_type = ? WHERE seat_no = ?", (new_day_type, seat_no))
+    conn.commit()
+    updated = cursor.rowcount > 0
+    conn.close()
+
+    if updated:
+        send_push_notification(f"🔄 Seat {seat_no} switched to {new_day_type}")
+    return updated
+
