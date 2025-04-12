@@ -49,6 +49,7 @@ def init_db():
 
 
 def get_all_students():
+    
     conn = connect()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM students ORDER BY seat_no ASC")  # ✅ Sorted to maintain consistent card order
@@ -57,7 +58,7 @@ def get_all_students():
 
     return [
         {
-            "Seat No": row[0],
+            "Seat No": str(row[0]),  # <-- explicitly cast to string
             "Name": row[1],
             "Day Type": row[2],
             "Charge": row[3],
@@ -95,7 +96,7 @@ def get_expired_students():
 
             if expiry_date < today:
                 expired.append({
-                    "Seat No": row[0],
+                    "Seat No": str(row[0]),  # <-- explicitly cast to string
                     "Name": row[1],
                     "Day Type": row[2],
                     "Charge": row[3],
@@ -221,7 +222,7 @@ def get_left_students():
     conn.close()
     return [
         {
-            "Seat No": row[1],
+                        "Seat No": str(row[0]),  # <-- explicitly cast to string
             "Name": row[2],
             "Phone": row[3],
             "Start Date": row[4],
