@@ -136,6 +136,8 @@ def replace_student(req):
     conn = connect()
     cursor = conn.cursor()
 
+    seat_no = str(req.seat_no)  # ENSURE it's always treated as a string
+
     if req.name.lower() == "vacant":
         cursor.execute("SELECT * FROM students WHERE seat_no = %s", (req.seat_no,))
         current = cursor.fetchone()
