@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 import os
 import csv
+from db_utils import add_student_card, remove_student_card
 
 from db_utils import (
     init_db,
@@ -55,9 +56,20 @@ class DayTypeUpdateRequest(BaseModel):
     seat_no: int
     new_day_type: str
 
+class AddStudentCardRequest(BaseModel):
+    seat_no: str
+    name: str
+    day_type: str
+    charge: int
+    start_date: str
+    phone: Optional[str] = ""
+    status: str
+
+
+
+
 # === WhatsApp Group Link ===
 
-WHATSAPP_LINK_FILE = "group_link.txt"
 
 
 from db_utils import get_setting, set_setting
@@ -152,9 +164,18 @@ def download_left_students():
 
     return FileResponse(path=filename, filename=filename, media_type='text/csv')
 
-@app.get("/download-db")
-def download_db():
-    db_path = "students.db"
-    if os.path.exists(db_path):
-        return FileResponse(path=db_path, filename="students.db", media_type="application/octet-stream")
-    raise HTTPException(status_code=404, detail="Database file not found")
+
+
+@app.post("/add-student-card")
+def add_student_card_handler(data: AddStudentCardRequest):
+    success, msg = add_student_card(data.dict())
+    if not success:
+        raise HTTPException(status_code=400, detail=msg)
+    return {"message": "Student card added successfully."}
+
+@app.delete("/remove-student-card/{seat_no}")
+def remove_student_card_handler(seat_no: str):
+    if not remove_student_card(seat_no):
+        raise HTTPException(status_code=404, detail="Seat not found.")
+    return {"message": f"Seat {seat_no} removed."}
+

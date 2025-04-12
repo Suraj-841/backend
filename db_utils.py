@@ -15,7 +15,7 @@ def init_db():
     cursor = conn.cursor()
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS students (
-            seat_no INTEGER PRIMARY KEY,
+            seat_no TEXT PRIMARY KEY,
             name TEXT,
             day_type TEXT,
             charge INTEGER,
@@ -35,7 +35,7 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS left_students (
             id SERIAL PRIMARY KEY,
-            seat_no INTEGER,
+            seat_no TEXT,
             name TEXT,
             phone TEXT,
             start_date TEXT,
@@ -273,4 +273,57 @@ def get_setting(key: str) -> str:
     result = cursor.fetchone()
     conn.close()
     return result[0] if result else ""
+
+
+
+def add_student_card(data):
+    conn = connect()
+    cursor = conn.cursor()
+
+    # Optional: Prevent duplicates
+    cursor.execute("SELECT * FROM students WHERE seat_no = %s", (data["seat_no"],))
+    if cursor.fetchone():
+        conn.close()
+        return False, "Seat already exists"
+
+    # Calculate expiry if start date is valid
+    expiry_date = ""
+    try:
+        start_dt = datetime.strptime(data["start_date"], "%d %B")
+        start_dt = start_dt.replace(year=datetime.now().year)
+        expiry = start_dt + timedelta(days=30)
+        expiry_date = expiry.strftime("%d %B %Y")
+    except:
+        pass
+
+    cursor.execute("""
+        INSERT INTO students (seat_no, name, day_type, charge, start_date, expiry_date, status, phone)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """, (
+        data["seat_no"],
+        data["name"],
+        data["day_type"],
+        data["charge"],
+        data["start_date"],
+        expiry_date,
+        data["status"],
+        data["phone"]
+    ))
+
+    conn.commit()
+    conn.close()
+    send_push_notification(f"📥 Seat {data['seat_no']} added for {data['name']}")
+    return True, "Added"
+
+
+def remove_student_card(seat_no: str):
+    conn = connect()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM students WHERE seat_no = %s", (seat_no,))
+    conn.commit()
+    deleted = cursor.rowcount > 0
+    conn.close()
+    if deleted:
+        send_push_notification(f"🗑️ Seat {seat_no} removed.")
+    return deleted
 
