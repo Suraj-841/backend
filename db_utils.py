@@ -110,7 +110,7 @@ def get_expired_students():
 
     return expired
 
-def update_expiry(seat_no: int, new_expiry: str):
+def update_expiry(seat_no: str, new_expiry: str):
     conn = connect()
     cursor = conn.cursor()
     cursor.execute("UPDATE students SET expiry_date = %s WHERE seat_no = %s", (new_expiry, seat_no))
@@ -121,7 +121,7 @@ def update_expiry(seat_no: int, new_expiry: str):
         send_push_notification(f"📆 Expiry updated for Seat {seat_no} to {new_expiry}.")
     return success
 
-def update_status(seat_no: int, new_status: str):
+def update_status(seat_no: str, new_status: str):
     conn = connect()
     cursor = conn.cursor()
     cursor.execute("UPDATE students SET status = %s WHERE seat_no = %s", (new_status, seat_no))
@@ -242,7 +242,7 @@ def daily_check():
     conn.close()
     return {"expired_students": expired_students, "count": count}
 
-def update_day_type(seat_no: int, new_day_type: str):
+def update_day_type(seat_no: str, new_day_type: str):
     conn = connect()
     cursor = conn.cursor()
     cursor.execute("UPDATE students SET day_type = %s WHERE seat_no = %s", (new_day_type, seat_no))

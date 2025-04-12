@@ -35,16 +35,16 @@ init_db()
 # === Models ===
 
 class StatusUpdateRequest(BaseModel):
-    seat_no: int
+    seat_no: str   
     new_status: str
 
 class UpdateExpiryRequest(BaseModel):
-    seat_no: int
+    seat_no: str   
     name: str
     new_expiry: str
 
 class ReplaceStudentRequest(BaseModel):
-    seat_no: int
+    seat_no: str   
     name: str
     day_type: str
     charge: int
@@ -53,7 +53,7 @@ class ReplaceStudentRequest(BaseModel):
     status: str
 
 class DayTypeUpdateRequest(BaseModel):
-    seat_no: int
+    seat_no: str   
     new_day_type: str
 
 class AddStudentCardRequest(BaseModel):
