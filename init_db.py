@@ -1,5 +1,1 @@
-# init_db.py
-from db_utils import init_db
-
-init_db()
-print("✅ Database initialized successfully.")
+# File removed: This script is no longer needed. Database initialization is handled in main.py.
