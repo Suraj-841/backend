@@ -31,7 +31,8 @@ from db_utils import (
     get_expenses,
     get_total_expenses,
     get_net_profit,
-    update_charge
+    update_charge,
+    update_due_amount
 )
 from notifier import send_push_notification
 
@@ -96,6 +97,10 @@ class RecordExpenseRequest(BaseModel):
     category: str
     amount: int
     description: Optional[str] = ""
+
+class UpdateDueAmountRequest(BaseModel):
+    seat_no: str
+    amount: int
 
 
 
@@ -458,4 +463,12 @@ def dashboard_totals(month: int = None, year: int = None):
         "total_collected": total_collected,
         "total_expenses": total_expenses
     }
+
+@app.post("/update-due")
+def update_due_amount_handler(req: UpdateDueAmountRequest):
+    success = update_due_amount(req.seat_no, req.amount)
+    if not success:
+        raise HTTPException(status_code=404, detail="Student not found")
+    send_push_notification(f"💰 Due amount updated for Seat {req.seat_no} to ₹{req.amount}")
+    return {"message": "Due amount updated successfully."}
 
