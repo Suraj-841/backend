@@ -267,15 +267,25 @@ def daily_check():
     cursor = conn.cursor()
     count = 0
     for student in expired_students:
-        if student['Status'].lower() != "pending":
-            # Fetch the latest charge from the database for this seat
-            cursor.execute("SELECT charge FROM students WHERE seat_no = %s", (student['Seat No'],))
-            charge_row = cursor.fetchone()
-            latest_charge = charge_row[0] if charge_row and charge_row[0] is not None else 0
-            # Set status to Pending
-            cursor.execute("UPDATE students SET status = %s WHERE seat_no = %s", ("Pending", student['Seat No']))
-            # Set due_amount to latest charge
-            cursor.execute("UPDATE students SET due_amount = %s WHERE seat_no = %s", (latest_charge, student['Seat No']))
+        # Fetch the latest charge and due from the database for this seat.
+        # A Pending student with a zero due is invalid and needs repairing,
+        # but a non-zero Pending due can be a partial-payment balance.
+        cursor.execute(
+            "SELECT charge, due_amount FROM students WHERE seat_no = %s",
+            (student['Seat No'],)
+        )
+        charge_row = cursor.fetchone()
+        latest_charge = charge_row[0] if charge_row and charge_row[0] is not None else 0
+        current_due = charge_row[1] if charge_row and charge_row[1] is not None else 0
+
+        is_pending = (student['Status'] or "").strip().lower() == "pending"
+        should_mark_due = not is_pending or current_due == 0
+
+        if should_mark_due:
+            cursor.execute(
+                "UPDATE students SET status = %s, due_amount = %s WHERE seat_no = %s",
+                ("Pending", latest_charge, student['Seat No'])
+            )
             count += 1
     conn.commit()
     conn.close()
