@@ -683,3 +683,4 @@ def get_students_with_dues():
             "Due": row[8] if len(row) > 8 else 0
         } for row in rows
     ]
+
